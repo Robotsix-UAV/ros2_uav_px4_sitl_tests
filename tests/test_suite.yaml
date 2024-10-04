@@ -1,0 +1,19 @@
+# Directory containing the launch scripts
+launch_scripts_dir: "${SIMULATION_SCRIPTS_DIR}"
+
+# Simulation launch script details
+simulation:
+  script: "launch_simulation.sh"
+  config_file: "../configurations/simulation_config_custom.yaml"
+
+# Mode nodes launch script details
+mode_nodes:
+  script: "launch_simulation_nodes.sh"
+  config_file: "../configurations/simulation_config_custom.yaml"
+
+# Mission configuration
+mission:
+  config_file: "missions.yaml"
+
+# Sleep duration before starting tests (in seconds)
+startup_delay: 10
