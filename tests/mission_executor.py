@@ -16,6 +16,24 @@ import yaml
 import argparse
 import os
 
+import rclpy
+import time
+from rclpy.node import Node
+from rclpy.duration import Duration
+
+from ros2_uav_px4.srv import ModeSelector
+from ros2_uav_interfaces.msg import ModeStatus, PoseHeading, Waypoint, WaypointList
+from px4_msgs.msg import VehicleOdometry
+from geometry_msgs.msg import Point
+
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+
+import sys
+import math
+import yaml
+import argparse
+import os
+
 class MissionExecutor(Node):
     def __init__(self, namespace='/uav0', missions_file='missions.yaml'):
         super().__init__('mission_executor')
@@ -44,6 +62,10 @@ class MissionExecutor(Node):
         )
         self.command_publisher = self.create_publisher(PoseHeading, f'{self.namespace}/command/pose_heading', qos_profile)
 
+        # Publisher for waypoint list
+        self.waypoint_list_publisher = self.create_publisher(
+            WaypointList, f'{self.namespace}/command/waypoints', qos_profile)
+
         # Subscriber for mode status
         self.mode_status_sub = self.create_subscription(
             ModeStatus,
@@ -60,6 +82,12 @@ class MissionExecutor(Node):
         self.mode_status_sub_landspin = self.create_subscription(
             ModeStatus,
             f'{self.namespace}/modes_status/landspin',
+            self.mode_status_callback,
+            qos_profile
+        )
+        self.mode_status_sub_nlmpcwaypoints = self.create_subscription(
+            ModeStatus,
+            f'{self.namespace}/modes_status/nlmpcwaypoints',
             self.mode_status_callback,
             qos_profile
         )
@@ -106,7 +134,8 @@ class MissionExecutor(Node):
         mode_mapping = {
             "POSITION": ModeSelector.Request.POSITION,
             "NLMPCPOSITION": ModeSelector.Request.NLMPCPOSITION,
-            "LANDSPIN": ModeSelector.Request.LANDSPIN
+            "LANDSPIN": ModeSelector.Request.LANDSPIN,
+            "NLMPCWAYPOINTS": ModeSelector.Request.NLMPCWAYPOINTS
         }
         if mode not in mode_mapping:
             self.get_logger().error(f"Unknown mode: {mode}")
@@ -157,10 +186,32 @@ class MissionExecutor(Node):
         else:
             return None
 
+    def send_waypoint_list(self, waypoints):
+        msg = WaypointList()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = f"{self.namespace}/odom"
+
+        # Convert the list of waypoint dictionaries to Waypoint messages
+        msg.waypoints = []
+        for wp in waypoints:
+            waypoint = Waypoint()
+            waypoint.position = Point(
+                x=wp['position']['x'],
+                y=wp['position']['y'],
+                z=wp['position']['z']
+            )
+            waypoint.heading = wp.get('heading', 0.0)
+            waypoint.speed = wp.get('speed', 1.0)  # Default speed if not specified
+            msg.waypoints.append(waypoint)
+
+        self.waypoint_list_publisher.publish(msg)
+        self.get_logger().info(f"Published waypoint list with {len(msg.waypoints)} waypoints.")
+
     def execute_mission(self, mission):
         mode = mission['mode']
-        setpoint = mission.get('setpoint', None)
         mission_name = mission.get('name', mode)
+        setpoint = mission.get('setpoint', None)
+        waypoints = mission.get('waypoints', None)
 
         self.get_logger().info(f"--- Executing Mission: {mission_name} ---")
 
@@ -182,7 +233,7 @@ class MissionExecutor(Node):
                 return False
             rclpy.spin_once(self, timeout_sec=0.5)
 
-        # Step 3: Send Setpoint if Applicable
+        # Step 3: Send Setpoint or Waypoints
         if setpoint:
             self.send_setpoint(setpoint)
 
@@ -209,6 +260,21 @@ class MissionExecutor(Node):
                 if (self.get_clock().now() - start_time) > Duration(seconds=timeout):
                     self.get_logger().error("Timeout waiting for drone to reach the expected position.")
                     return False
+                rclpy.spin_once(self, timeout_sec=0.5)
+
+        elif waypoints:
+            self.send_waypoint_list(waypoints)
+            self.get_logger().info("Waypoint list sent to the drone.")
+            # Allow some time for the drone to process the setpoint
+            start_time = self.get_clock().now()
+            time_wait = 1.0
+            while (self.get_clock().now() - start_time) < Duration(seconds=time_wait):
+                rclpy.spin_once(self, timeout_sec=0.5)
+            self.completed = False
+            while True:
+                # waiting for the drone to reach the last waypoint
+                if self.completed:
+                    break
                 rclpy.spin_once(self, timeout_sec=0.5)
 
         self.get_logger().info(f"Mission '{mission_name}' executed successfully.")

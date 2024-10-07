@@ -1,0 +1,33 @@
+# missions.yaml
+
+missions:
+  - name: "NLMPC Waypoint Mode Mission"
+    mode: "NLMPCWAYPOINTS"
+    waypoints:
+      - position:
+          x: 0.0
+          y: 200.0
+          z: 20.0
+        heading: 0.0
+        speed: 10.0
+      - position:
+          x: 200.0
+          y: 200.0
+          z: 20.0
+        heading: 0.0
+        speed: 15.0
+      - position:
+          x: 200.0
+          y: 0.0
+          z: 20.0
+        heading: 1.57
+        speed: 15.0
+      - position:
+          x: 0.0
+          y: 0.0
+          z: 5.0
+        heading: 3.14  # 180 degrees in radians
+        speed: 10.0
+  - name: "LandSpin Mode Mission"
+    mode: "LANDSPIN"
+    setpoint: null  # No setpoint needed for LANDSPIN
