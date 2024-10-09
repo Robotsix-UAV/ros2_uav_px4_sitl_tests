@@ -5,9 +5,9 @@ missions:
     mode: "POSITION"
     setpoint:
       position:
-        x: 50.0
+        x: 0.0
         y: 0.0
-        z: 20.0
+        z: 6.0
       velocity:
         x: 0.0
         y: 0.0
@@ -15,40 +15,7 @@ missions:
       heading: 1.57
   - name: "Position Mode"
     mode: "POSITION"
-    setpoint:
-      position:
-        x: 2.0
-        y: 2.0
-        z: 25.0
-      velocity:
-        x: 0.0
-        y: 0.0
-        z: 0.0
-      heading: 0.0
-  - name: "Position Mode"
-    mode: "POSITION"
-    setpoint:
-      position:
-        x: 500.0
-        y: 500.0
-        z: 200.0
-      velocity:
-        x: 0.0
-        y: 0.0
-        z: 0.0
-      heading: 0.0
-  - name: "Position Mode"
-    mode: "POSITION"
-    setpoint:
-      position:
-        x: 0.0
-        y: 0.0
-        z: 2.0
-      velocity:
-        x: 0.0
-        y: 0.0
-        z: 0.0
-      heading: 0.0
+    pause: 20.0
   - name: "LandSpin Mode Mission"
     mode: "LANDSPIN"
     setpoint: null  # No setpoint needed for LANDSPIN

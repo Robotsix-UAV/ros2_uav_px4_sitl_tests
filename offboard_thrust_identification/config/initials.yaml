@@ -1,0 +1,42 @@
+model:
+  vehicle_mass:
+    description: 'Mass of the UAV'
+    type: float
+    default: 3.6
+    min: 0.0
+
+  thrust_constant_coefficient:
+    description: 'Thrust constant coefficient for thrust scaling'
+    type: float
+    default: 0.0
+
+  thrust_linear_coefficient:
+    description: 'Thrust linear coefficient for thrust scaling'
+    type: float
+    default: 120.0
+
+  thrust_quadratic_coefficient:
+    description: 'Thrust quadratic coefficient for thrust scaling'
+    type: float
+    default: 0.0
+    min: 0.0
+
+  lift_linear_coefficient:
+    description: 'Lift linear coefficient as a function of the UAV velocity'
+    type: float
+    default: 0.0
+
+  lift_quadratic_coefficient:
+    description: 'Lift quadratic coefficient as a function of the UAV velocity'
+    type: float
+    default: 0.0
+
+  drag_linear_coefficient:
+    description: 'Drag linear coefficient as a function of the UAV velocity'
+    type: float
+    default: 0.0
+
+  drag_quadratic_coefficient:
+    description: 'Drag quadratic coefficient as a function of the UAV velocity'
+    type: float
+    default: 0.0

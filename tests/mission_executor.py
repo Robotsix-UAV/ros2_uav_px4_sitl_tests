@@ -212,6 +212,7 @@ class MissionExecutor(Node):
         mission_name = mission.get('name', mode)
         setpoint = mission.get('setpoint', None)
         waypoints = mission.get('waypoints', None)
+        pause = mission.get('pause', None)
 
         self.get_logger().info(f"--- Executing Mission: {mission_name} ---")
 
@@ -233,7 +234,7 @@ class MissionExecutor(Node):
                 return False
             rclpy.spin_once(self, timeout_sec=0.5)
 
-        # Step 3: Send Setpoint or Waypoints
+        # Step 3: Send Setpoint or Waypoints or pause
         if setpoint:
             self.send_setpoint(setpoint)
 
@@ -276,6 +277,9 @@ class MissionExecutor(Node):
                 if self.completed:
                     break
                 rclpy.spin_once(self, timeout_sec=0.5)
+        elif pause:
+            self.get_logger().info(f"Pausing for {pause} seconds...")
+            time.sleep(pause)
 
         self.get_logger().info(f"Mission '{mission_name}' executed successfully.")
         return True
