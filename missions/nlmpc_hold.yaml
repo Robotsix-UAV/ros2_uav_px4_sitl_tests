@@ -1,0 +1,20 @@
+
+missions:
+  - name: "Takeoff Mission"
+    action: "TAKE_OFF"
+  - name: "Modify Parameters Mission"
+    action: "MODIFY_PARAMS"
+    parameters:
+      node_name: "parameter_server"
+      params:
+        limits.ground_velocity : 5.0
+        limits.ground_acceleration : 1.0
+        limits.vertical_velocity : 5.0
+        limits.vertical_acceleration : 1.0
+        limits.global_velocity : 5.0
+        limits.global_acceleration : 0.5
+        limits.angular_velocity_z : 1.0
+  - name: "NLMPC Position Mode Mission"
+    action: "PIPELINE"
+    pipeline_name: "NlmpcPosition"
+    pause: 10.0

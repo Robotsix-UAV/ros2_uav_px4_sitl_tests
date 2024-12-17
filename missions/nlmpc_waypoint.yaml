@@ -1,33 +1,55 @@
-# missions.yaml
-
 missions:
+  # Mission 1: Takeoff Mission
+  - name: "Takeoff Mission"
+    action: "TAKE_OFF"
+  - name: "Modify Parameters Mission"
+    action: "MODIFY_PARAMS"
+    parameters:
+      node_name: "parameter_server"
+      params:
+        limits.ground_velocity : 60.0
+        limits.ground_acceleration : 8.0
+        limits.vertical_velocity : 60.0
+        limits.vertical_acceleration : 8.0
+        limits.global_velocity : 60.0
+        limits.global_acceleration : 8.0
+        limits.angular_velocity_z : 0.1
+        waypoint_tracker.velocity_gain : 1.0
+        multirotor_nlmpc.rate_damping : 0.0
+        multirotor_nlmpc.position_tracking_loss_threshold: 15.0
+  - name: "NLMPC Position Mode Mission"
+    action: "PIPELINE"
+    pipeline_name: "NlmpcPosition"
+    pause: 2.0
   - name: "NLMPC Waypoint Mode Mission"
-    mode: "NLMPCWAYPOINTS"
+    action: "PIPELINE"
+    pipeline_name: "NlmpcWaypoints"
     waypoints:
       - position:
           x: 0.0
-          y: 200.0
-          z: 20.0
+          y: -150.0
+          z: 40.0
         heading: 0.0
-        speed: 10.0
+        speed: 30.0
       - position:
           x: 200.0
-          y: 200.0
-          z: 20.0
+          y: -150.0
+          z: 40.0
         heading: 0.0
-        speed: 15.0
+        speed: 40.0
       - position:
-          x: 200.0
+          x: 150.0
           y: 0.0
-          z: 20.0
-        heading: 1.57
-        speed: 15.0
+          z: 40.0
+        heading: 0.0
+        speed: 20.0
       - position:
           x: 0.0
           y: 0.0
-          z: 5.0
-        heading: 3.14  # 180 degrees in radians
-        speed: 10.0
+          z: 40.0
+        heading: 0.0
+        speed: 15.0
+
+  # Mission 3: LandSpin Mode Mission
   - name: "LandSpin Mode Mission"
-    mode: "LANDSPIN"
-    setpoint: null  # No setpoint needed for LANDSPIN
+    action: "LAND"  # Using LAND for consistency

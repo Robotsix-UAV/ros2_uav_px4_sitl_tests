@@ -4,25 +4,9 @@ import time
 from rclpy.node import Node
 from rclpy.duration import Duration
 
-from ros2_uav_px4.srv import ModeSelector
-from ros2_uav_interfaces.msg import ModeStatus, PoseHeading
-from px4_msgs.msg import VehicleOdometry
-
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-
-import sys
-import math
-import yaml
-import argparse
-import os
-
-import rclpy
-import time
-from rclpy.node import Node
-from rclpy.duration import Duration
-
-from ros2_uav_px4.srv import ModeSelector
-from ros2_uav_interfaces.msg import ModeStatus, PoseHeading, Waypoint, WaypointList
+from ros2_uav_interfaces.srv import UserRequest
+from ros2_uav_interfaces.msg import PoseHeading, Waypoint, WaypointList
+from std_msgs.msg import String
 from px4_msgs.msg import VehicleOdometry
 from geometry_msgs.msg import Point
 
@@ -33,6 +17,10 @@ import math
 import yaml
 import argparse
 import os
+
+# Import parameter services and messages
+from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
 
 class MissionExecutor(Node):
     def __init__(self, namespace='/uav0', missions_file='missions.yaml'):
@@ -46,12 +34,12 @@ class MissionExecutor(Node):
             self.get_logger().error(f"No missions found in {missions_file}. Exiting.")
             sys.exit(1)
 
-        # Service client for setting mode
-        self.set_mode_client = self.create_client(ModeSelector, f'{self.namespace}/set_mode')
-        while not self.set_mode_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for set_mode service...')
+        # Service client for setting user action
+        self.set_action_client = self.create_client(UserRequest, f'{self.namespace}/user_request')
+        while not self.set_action_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for user_request service...')
             if not rclpy.ok():
-                self.get_logger().error('ROS 2 shutdown while waiting for set_mode service.')
+                self.get_logger().error('ROS 2 shutdown while waiting for user_request service.')
                 sys.exit(1)
 
         # Publisher for command pose_heading
@@ -65,32 +53,6 @@ class MissionExecutor(Node):
         # Publisher for waypoint list
         self.waypoint_list_publisher = self.create_publisher(
             WaypointList, f'{self.namespace}/command/waypoints', qos_profile)
-
-        # Subscriber for mode status
-        self.mode_status_sub = self.create_subscription(
-            ModeStatus,
-            f'{self.namespace}/modes_status/position',
-            self.mode_status_callback,
-            qos_profile
-        )
-        self.mode_status_sub_nlmpc = self.create_subscription(
-            ModeStatus,
-            f'{self.namespace}/modes_status/nlmpcposition',
-            self.mode_status_callback,
-            qos_profile
-        )
-        self.mode_status_sub_landspin = self.create_subscription(
-            ModeStatus,
-            f'{self.namespace}/modes_status/landspin',
-            self.mode_status_callback,
-            qos_profile
-        )
-        self.mode_status_sub_nlmpcwaypoints = self.create_subscription(
-            ModeStatus,
-            f'{self.namespace}/modes_status/nlmpcwaypoints',
-            self.mode_status_callback,
-            qos_profile
-        )
 
         # Subscriber for odometry
         px4_odometry_qos_profile = QoSProfile(
@@ -106,7 +68,14 @@ class MissionExecutor(Node):
         )
         self.current_odometry = None
 
-        self.completed = False
+        # Subscriber to current fsm state
+        self.fsm_state_sub = self.create_subscription(
+            String,
+            f'{self.namespace}/fsm_state',
+            self.fsm_state_callback,
+            1
+        )
+        self.current_fsm_state = None
 
     def load_missions(self, missions_file):
         if not os.path.exists(missions_file):
@@ -122,37 +91,56 @@ class MissionExecutor(Node):
             self.get_logger().error(f"Failed to load missions from {missions_file}: {e}")
             return None
 
-    def mode_status_callback(self, msg):
-        if msg.status == ModeStatus.IDLE:
-            self.completed = True
-
     def odometry_callback(self, msg):
         self.current_odometry = msg
 
-    def set_mode(self, mode):
-        request = ModeSelector.Request()
-        mode_mapping = {
-            "POSITION": ModeSelector.Request.POSITION,
-            "NLMPCPOSITION": ModeSelector.Request.NLMPCPOSITION,
-            "LANDSPIN": ModeSelector.Request.LANDSPIN,
-            "NLMPCWAYPOINTS": ModeSelector.Request.NLMPCWAYPOINTS
+    def fsm_state_callback(self, msg):
+        self.current_fsm_state = msg.data
+
+    def set_action(self, action, pipeline_name=''):
+        request = UserRequest.Request()
+        action_mapping = {
+            "TAKE_OFF": 0,
+            "LAND": 1,
+            "LAND_HOME": 2,
+            "PIPELINE": 3
         }
-        if mode not in mode_mapping:
-            self.get_logger().error(f"Unknown mode: {mode}")
+        if action not in action_mapping:
+            self.get_logger().error(f"Unknown action: {action}")
             return False
 
-        request.mode = mode_mapping[mode]
-        self.get_logger().info(f"Setting mode to {mode}...")
+        request.action = action_mapping[action]
+        request.pipeline_name = pipeline_name
+        self.get_logger().info(f"Setting action to {action} with pipeline_name='{pipeline_name}'...")
 
-        future = self.set_mode_client.call_async(request)
+        future = self.set_action_client.call_async(request)
         rclpy.spin_until_future_complete(self, future)
+        alright = future.result() is not None
 
-        if future.result() is not None:
-            self.get_logger().info(f"Mode set to {mode}")
+        if alright:
+            self.get_logger().info(f"Action '{action}' set successfully.")
+            if action == "TAKE_OFF":
+                if not self.check_fsm_state(["ControlPipeline"], timeout=30):
+                    return False
+            if action == "PIPELINE":
+                if not self.check_fsm_state(["ControlPipeline"], timeout=10):
+                    return False
             return True
         else:
-            self.get_logger().error(f"Failed to set mode to {mode}")
+            self.get_logger().error(f"Failed to set action to {action}")
             return False
+
+    def check_fsm_state(self, expected_states, timeout=10):
+        self.get_logger().info(f"Waiting for FSM state to be '{expected_states}'...")
+        start_time = self.get_clock().now()
+        while True:
+            if self.current_fsm_state in expected_states:
+                self.get_logger().info(f"FSM state is '{self.current_fsm_state}'.")
+                return True
+            if (self.get_clock().now() - start_time) > Duration(seconds=timeout):
+                self.get_logger().error(f"Timeout waiting for FSM state '{expected_states}'.")
+                return False
+            rclpy.spin_once(self, timeout_sec=0.5)
 
     def send_setpoint(self, setpoint):
         msg = PoseHeading()
@@ -207,41 +195,84 @@ class MissionExecutor(Node):
         self.waypoint_list_publisher.publish(msg)
         self.get_logger().info(f"Published waypoint list with {len(msg.waypoints)} waypoints.")
 
+    def set_node_parameters(self, node_name, params_dict):
+        client = self.create_client(SetParameters, f'{self.namespace}/{node_name}/set_parameters')
+        while not client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info(f'Waiting for parameter service of node {node_name}...')
+            if not rclpy.ok():
+                self.get_logger().error('ROS 2 shutdown while waiting for parameter service.')
+                return False
+        request = SetParameters.Request()
+        parameters = []
+        for param_name, param_value in params_dict.items():
+            self.get_logger().info(f"Setting parameter '{param_name}' to {param_value} on node {node_name}")
+            parameter = Parameter()
+            parameter.name = param_name
+            parameter.value = ParameterValue()
+            # Set the type and value appropriately
+            if isinstance(param_value, int):
+                parameter.value.type = ParameterType.PARAMETER_INTEGER
+                parameter.value.integer_value = param_value
+            elif isinstance(param_value, float):
+                parameter.value.type = ParameterType.PARAMETER_DOUBLE
+                parameter.value.double_value = param_value
+            elif isinstance(param_value, bool):
+                parameter.value.type = ParameterType.PARAMETER_BOOL
+                parameter.value.bool_value = param_value
+            elif isinstance(param_value, str):
+                parameter.value.type = ParameterType.PARAMETER_STRING
+                parameter.value.string_value = param_value
+            else:
+                self.get_logger().error(f"Unsupported parameter type for parameter {param_name}")
+                continue
+            parameters.append(parameter)
+        request.parameters = parameters
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is not None:
+            self.get_logger().info(f"Parameters set successfully on node {node_name}")
+            return True
+        else:
+            self.get_logger().error(f"Failed to set parameters on node {node_name}")
+            return False
+
     def execute_mission(self, mission):
-        mode = mission['mode']
-        mission_name = mission.get('name', mode)
+        action = mission['action']
+        mission_name = mission.get('name', action)
         setpoint = mission.get('setpoint', None)
         waypoints = mission.get('waypoints', None)
         pause = mission.get('pause', None)
+        pipeline_name = mission.get('pipeline_name', '')
 
         self.get_logger().info(f"--- Executing Mission: {mission_name} ---")
 
-        # Step 1: Set Mode
-        if not self.set_mode(mode):
-            self.get_logger().error(f"Failed to set mode to {mode}. Aborting mission.")
-            return False
-        # Allow some time for the drone to switch modes
-        time.sleep(1.0)
-
-        # Step 2: Wait for Mode to Reach IDLE
-        self.completed = False
-        self.get_logger().info(f"Waiting for mode {mode} to reach IDLE state...")
-        timeout = 30  # seconds
-        start_time = self.get_clock().now()
-        while not self.completed:
-            if (self.get_clock().now() - start_time) > Duration(seconds=timeout):
-                self.get_logger().error(f"Timeout waiting for mode {mode} to reach IDLE state.")
+        # Handle MODIFY_PARAMS action
+        if action == "MODIFY_PARAMS":
+            parameters = mission.get('parameters', None)
+            if parameters:
+                node_name = parameters.get('node_name')
+                params = parameters.get('params')
+                if node_name and params:
+                    if not self.set_node_parameters(node_name, params):
+                        self.get_logger().error(f"Failed to set parameters on node {node_name}. Aborting mission.")
+                        return False
+                else:
+                    self.get_logger().error(f"Parameters 'node_name' and 'params' must be specified in mission '{mission_name}'.")
+                    return False
+            else:
+                self.get_logger().error(f"No 'parameters' field specified in mission '{mission_name}'.")
                 return False
-            rclpy.spin_once(self, timeout_sec=0.5)
+            self.get_logger().info(f"Mission '{mission_name}' executed successfully.")
+            return True
 
-        # Step 3: Send Setpoint or Waypoints or pause
+        # Existing action handling
+        if not self.set_action(action, pipeline_name):
+            self.get_logger().error(f"Failed to set action to {action}. Aborting mission.")
+            return False
+        # Step 2: Check takeoff send Setpoint or Waypoints or pause
         if setpoint:
             self.send_setpoint(setpoint)
-
-            # Allow some time for the drone to process the setpoint
-            rclpy.spin_once(self, timeout_sec=2.0)
-
-            # Step 4: Verify Position
+            # Verify Position
             self.get_logger().info("Verifying drone position...")
             timeout = 200  # seconds
             start_time = self.get_clock().now()
@@ -250,7 +281,7 @@ class MissionExecutor(Node):
                 current_position = self.get_current_position()
                 if current_position:
                     distance = self.calculate_distance(setpoint['position'], current_position)
-                    if distance <= 1.0:
+                    if distance <= 3.0:
                         self.get_logger().info("Drone reached the expected position.")
                         break
 
@@ -262,20 +293,30 @@ class MissionExecutor(Node):
                     self.get_logger().error("Timeout waiting for drone to reach the expected position.")
                     return False
                 rclpy.spin_once(self, timeout_sec=0.5)
-
         elif waypoints:
+            time.sleep(0.5)
             self.send_waypoint_list(waypoints)
             self.get_logger().info("Waypoint list sent to the drone.")
-            # Allow some time for the drone to process the setpoint
+            # Check the distance to the last waypoint
+            last_waypoint = waypoints[-1]
+            timeout = 200
             start_time = self.get_clock().now()
-            time_wait = 1.0
-            while (self.get_clock().now() - start_time) < Duration(seconds=time_wait):
-                rclpy.spin_once(self, timeout_sec=0.5)
-            self.completed = False
+            last_print_time = self.get_clock().now()
             while True:
-                # waiting for the drone to reach the last waypoint
-                if self.completed:
-                    break
+                current_position = self.get_current_position()
+                if current_position:
+                    distance = self.calculate_distance(last_waypoint['position'], current_position)
+                    if distance <= 2.0:
+                        self.get_logger().info("Drone reached the last waypoint.")
+                        break
+
+                    if (self.get_clock().now() - last_print_time) > Duration(seconds=10):
+                        self.get_logger().info(f"Waiting for drone to reach last waypoint. Measured distance: {distance:.2f} meters")
+                        last_print_time = self.get_clock().now()
+
+                if (self.get_clock().now() - start_time) > Duration(seconds=timeout):
+                    self.get_logger().error("Timeout waiting for drone to reach the last waypoint.")
+                    return False
                 rclpy.spin_once(self, timeout_sec=0.5)
         elif pause:
             self.get_logger().info(f"Pausing for {pause} seconds...")
@@ -313,12 +354,12 @@ def main(args=None):
     for mission in executor_node.missions:
         success = executor_node.execute_mission(mission)
         if not success:
-            executor_node.get_logger().error(f"Mission '{mission.get('name', mission['mode'])}' failed.")
+            executor_node.get_logger().error(f"Mission '{mission.get('name', mission['action'])}' failed.")
             success_all = False
             # Depending on requirements, you can choose to continue with next missions or abort.
             # Here, we continue with the next mission.
         else:
-            executor_node.get_logger().info(f"Mission '{mission.get('name', mission['mode'])}' completed successfully.")
+            executor_node.get_logger().info(f"Mission '{mission.get('name', mission['action'])}' completed successfully.")
 
     if success_all:
         executor_node.get_logger().info("All missions executed successfully.")

@@ -1,21 +1,29 @@
-# missions.yaml
-
 missions:
+  # Mission 1: Takeoff Mission
+  - name: "Takeoff Mission"
+    action: "TAKE_OFF"
+
+  # Mission 2: Position Mode Mission (initial setpoint)
   - name: "Position Mode"
-    mode: "POSITION"
+    action: "PIPELINE"
+    pipeline_name: "Se3Position"
     setpoint:
       position:
         x: 0.0
         y: 0.0
-        z: 6.0
+        z: 2.5
       velocity:
         x: 0.0
         y: 0.0
         z: 0.0
       heading: 1.57
+
+  # Mission 3: Position Mode Mission (pause)
   - name: "Position Mode"
-    mode: "POSITION"
+    action: "PIPELINE"
+    pipeline_name: "Se3Position"
     pause: 20.0
+
+  # Mission 4: LandSpin Mode Mission
   - name: "LandSpin Mode Mission"
-    mode: "LANDSPIN"
-    setpoint: null  # No setpoint needed for LANDSPIN
+    action: "LAND"  # Using LAND for consistency
