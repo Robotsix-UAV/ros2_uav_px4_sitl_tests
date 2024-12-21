@@ -1,0 +1,46 @@
+# missions.yaml
+
+missions:
+  - name: "Takeoff Mission"
+    action: "TAKE_OFF"
+    setpoint:
+      position:
+        x: 0.0
+        y: 0.0
+        z: 5.0  # Should match the default value of takeoff.altitude
+      velocity:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      heading: 0.0
+  - name: "Modify Parameters Mission"
+    action: "MODIFY_PARAMS"
+    parameters:
+      node_name: "parameter_server"
+      params:
+        limits.ground_velocity : 20.0
+        limits.ground_acceleration : 3.0
+        limits.vertical_velocity : 20.0
+        limits.vertical_acceleration : 3.0
+        limits.global_velocity : 20.0
+        limits.global_acceleration : 3.0
+        limits.angular_velocity_z : 1.0
+        disturbance_observer.enable : false
+  - name: "NLMPC Hit"
+    action: "PIPELINE"
+    pipeline_name: "NlmpcHit"
+    setpoint:
+      position:
+        x: 100.0
+        y: 0.0
+        z: 20.0
+      velocity:
+        x: 20.0
+        y: 0.0
+        z: 0.0
+      heading: 0.0
+  - name: "Stop"
+    action: "PIPELINE"
+    pipeline_name: "Stop"
+  - name: "Land Mission"
+    action: "LAND"
