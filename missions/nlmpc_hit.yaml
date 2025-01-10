@@ -1,18 +1,18 @@
 # missions.yaml
 
 missions:
-  - name: "Takeoff Mission"
-    action: "TAKE_OFF"
-    setpoint:
-      position:
-        x: 0.0
-        y: 0.0
-        z: 5.0  # Should match the default value of takeoff.altitude
-      velocity:
-        x: 0.0
-        y: 0.0
-        z: 0.0
-      heading: 0.0
+  # - name: "Takeoff Mission"
+  #   action: "TAKE_OFF"
+  #   setpoint:
+  #     position:
+  #       x: 0.0
+  #       y: 0.0
+  #       z: 5.0  # Should match the default value of takeoff.altitude
+  #     velocity:
+  #       x: 0.0
+  #       y: 0.0
+  #       z: 0.0
+  #     heading: 0.0
   - name: "Modify Parameters Mission"
     action: "MODIFY_PARAMS"
     parameters:
@@ -39,8 +39,3 @@ missions:
         y: 0.0
         z: 0.0
       heading: 0.0
-  - name: "Stop"
-    action: "PIPELINE"
-    pipeline_name: "Stop"
-  - name: "Land Mission"
-    action: "LAND"

@@ -269,6 +269,7 @@ class MissionExecutor(Node):
         if not self.set_action(action, pipeline_name):
             self.get_logger().error(f"Failed to set action to {action}. Aborting mission.")
             return False
+        time.sleep(0.1)
         # Step 2: Check takeoff send Setpoint or Waypoints or pause
         if setpoint:
             self.send_setpoint(setpoint)
